@@ -1,0 +1,10 @@
+{
+	"id": "obs-html-plugin",
+	"name": "Obs.Html Plugin",
+	"version": "0.0.1",
+	"minAppVersion": "0.12.0",
+	"description": "This is a companion plugin for Obsidian-html (https://obsidian-html.github.io/), it can be used to export your notes as html.",
+	"author": "dwrolvink",
+	"authorUrl": "https://obsidian-html.github.io/",
+	"isDesktopOnly": true
+}
