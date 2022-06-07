@@ -1,13 +1,19 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 import { exec } from 'child_process';
 
+var pretty = require('pretty');
+
 
 interface ObsHtmlPluginSettings {
-	mySetting: string;
+	config_abs_path: string;
+	export_folder_path: string;
+	run_obsidianhtml_after_export: boolean;
 }
 
 const DEFAULT_SETTINGS: ObsHtmlPluginSettings = {
-	mySetting: 'default'
+	config_abs_path: '',
+	export_folder_path: 'obs.html/export',
+	run_obsidianhtml_after_export: false
 }
 
 export default class ObsHtmlPlugin extends Plugin {
@@ -15,10 +21,11 @@ export default class ObsHtmlPlugin extends Plugin {
 	
 	// PROGRAM ATTRIBUTES
 	// ----------------------------------------------------------------------------------------------
-	
 	plugin_name = "[obs.html companion]";
-	export_folder_path = 'obs.html/export';
 
+	// GLOBALS
+	// ----------------------------------------------------------------------------------------------
+	basePath = (this.app.vault.adapter as any).basePath
 	
 	// GENERAL FUNCTIONS
 	// ----------------------------------------------------------------------------------------------
@@ -60,8 +67,6 @@ export default class ObsHtmlPlugin extends Plugin {
 	}
 
 	run_shell(command: string, callback?: any){
-		const basePath = (this.app.vault.adapter as any).basePath
-
 		exec(command, (error, stdout, stderr) => {
 			if (error) {
 				console.log(`error: ${error.message}`);
@@ -96,13 +101,14 @@ export default class ObsHtmlPlugin extends Plugin {
 
 		// save view state so that we can restore it at the end
 		const orViewState = this.app.workspace.activeLeaf.getViewState()
+		console.log(orViewState); 
 
 		// loop over each markdown file in Vault
 		for(let i = 0; i < files.length; i++){
 			console.log('------------', files[i].path)
 
 			// don't handle files in the export folder
-			if (isIn(this.export_folder_path, files[i].path)){
+			if (isIn(this.settings.export_folder_path, files[i].path)){
 				console.log('\t skipped')
 				continue;
 			}
@@ -129,16 +135,36 @@ export default class ObsHtmlPlugin extends Plugin {
 			}
 
 			// write html to export folder
-			const export_path = `${this.export_folder_path}/${files[i].path}.html`
-			let res = this.overwrite(export_path, html)
-			console.log(res)
-			await res
+			const export_path = `${this.settings.export_folder_path}/${files[i].path}.html`
+			await this.overwrite(export_path, pretty(html));
 		}
 
 		// restore original viewstate
+
 		this.app.workspace.activeLeaf.setViewState(orViewState);
 
 		this.flash('Export done');
+	}
+
+	async dump_file_list(type: string){
+		let files;
+		if (type == 'markdown'){
+			files = this.app.vault.getMarkdownFiles()
+		} else {
+			files = this.app.vault.getFiles()
+		}
+
+		let files_simple = []
+		for (let i = 0; i < files.length; i++) {  
+			console.log(files[i].path);
+			files_simple.push(files[i].path)
+		}
+		const export_path = `${this.settings.export_folder_path}/${type}_files.json`
+		console.log(export_path)
+		await this.overwrite(export_path, JSON.stringify(files_simple, null, 4))
+
+		this.flash(`Wrote list of ${type} files to ${this.basePath}/${export_path}`)
+
 	}
 
 	// MAIN FUNCTIONS
@@ -148,10 +174,12 @@ export default class ObsHtmlPlugin extends Plugin {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
+		let icons = ['logo-crystal', 'create-new', 'trash', 'search', 'right-triangle', 'document', 'folder', 'pencil', 'left-arrow', 'right-arrow', 'three-horizontal-bars', 'dot-network', 'audio-file', 'image-file', 'pdf-file', 'gear', 'documents', 'blocks', 'go-to-file', 'presentation', 'cross-in-box', 'microphone', 'microphone-filled', 'two-columns', 'link', 'popup-open', 'checkmark', 'hashtag', 'left-arrow-with-tail', 'right-arrow-with-tail', 'lines-of-text', 'vertical-three-dots', 'pin', 'magnifying-glass', 'info', 'horizontal-split', 'vertical-split', 'calendar-with-checkmark', 'sheets-in-box', 'up-and-down-arrows', 'broken-link', 'cross', 'any-key', 'reset', 'star', 'crossed-star', 'dice', 'filled-pin', 'enter', 'help', 'vault', 'open-vault', 'paper-plane', 'bullet-list', 'uppercase-lowercase-a', 'star-list', 'expand-vertically', 'languages', 'switch', 'pane-layout', 'install']
+		const ribbonIconEl = this.addRibbonIcon('paper-plane', `${this.plugin_name} Export html`, (evt: MouseEvent) => {
 			//this.create_export_folder();
 			this.export_html();
 		});
+		
 		// Perform additional things with the ribbon
 		ribbonIconEl.addClass('my-plugin-ribbon-class');
 
@@ -161,23 +189,17 @@ export default class ObsHtmlPlugin extends Plugin {
 
 		this.addCommand({
 			id: 'list-markdown-files',
-			name: 'List all markdown files',
-			callback: () => {
-				const files = this.app.vault.getMarkdownFiles()
-				for (let i = 0; i < files.length; i++) {  
-					console.log(files[i].path);
-				}
+			name: 'Export list of all markdown files to export folder',
+			callback: async () => {
+				this.dump_file_list('markdown')
 			}
 		});
 
 		this.addCommand({
 			id: 'list-all-files',
-			name: 'List all files',
+			name: 'Export list of all files to export folder',
 			callback: () => {
-				const files = this.app.vault.getFiles()
-				for (let i = 0; i < files.length; i++) {  
-					console.log(files[i].path);
-				}
+				this.dump_file_list('all')
 			}
 		});
 
@@ -201,35 +223,6 @@ export default class ObsHtmlPlugin extends Plugin {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
-}
-
 class SampleSettingTab extends PluginSettingTab {
 	plugin: ObsHtmlPlugin;
 
@@ -243,19 +236,40 @@ class SampleSettingTab extends PluginSettingTab {
 
 		containerEl.empty();
 
-		containerEl.createEl('h2', {text: 'Settings for my awesome plugin.'});
+		containerEl.createEl('h2', {text: 'Obs.html settings'});
 
 		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
+			.setName('Export folder')
+			.setDesc('This is the folder path (relative to your vault root) where all the html files will be placed.')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setValue(this.plugin.settings.export_folder_path)
 				.onChange(async (value) => {
-					console.log('Secret: ' + value);
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.export_folder_path = value;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName('Run obsidianhtml after export?')
+			.addToggle((t) => {
+				t.setValue(this.plugin.settings.run_obsidianhtml_after_export)
+				.onChange(async(v: boolean) => {
+					this.plugin.settings.run_obsidianhtml_after_export = v; 
+					console.log(this.plugin.settings.run_obsidianhtml_after_export)
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+		.setName('Config.yml path')
+		.setDesc('The *absolute* path to your config.yml file')
+		.addText(text => text
+			.setPlaceholder('Enter your path')
+			.setValue(this.plugin.settings.config_abs_path)
+			.onChange(async (value) => {
+				console.log('config.yml path: ' + value);
+				this.plugin.settings.config_abs_path = value;
+				await this.plugin.saveSettings();
+			}));
 	}
 }
 
