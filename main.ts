@@ -1,19 +1,25 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
-import { exec } from 'child_process';
+
+const util = require('util');
+const exec = util.promisify(require('child_process').exec);
+
 
 var pretty = require('pretty');
+
 
 
 interface ObsHtmlPluginSettings {
 	config_abs_path: string;
 	export_folder_path: string;
 	run_obsidianhtml_after_export: boolean;
+	cwd: string;
 }
 
 const DEFAULT_SETTINGS: ObsHtmlPluginSettings = {
 	config_abs_path: '',
 	export_folder_path: 'obs.html/export',
-	run_obsidianhtml_after_export: false
+	run_obsidianhtml_after_export: false,
+	cwd: ''
 }
 
 export default class ObsHtmlPlugin extends Plugin {
@@ -30,8 +36,8 @@ export default class ObsHtmlPlugin extends Plugin {
 	// GENERAL FUNCTIONS
 	// ----------------------------------------------------------------------------------------------
 
-	flash(message: string){
-		new Notice(this.plugin_name + ' ' + message);
+	flash(message: string, timeout?: any){
+		new Notice(this.plugin_name + ' ' + message, timeout);
 	}
 
 	get_file_or_folder(path: string){
@@ -66,21 +72,6 @@ export default class ObsHtmlPlugin extends Plugin {
 		return true
 	}
 
-	run_shell(command: string, callback?: any){
-		exec(command, (error, stdout, stderr) => {
-			if (error) {
-				console.log(`error: ${error.message}`);
-			}
-			if (stderr) {
-				console.log(`stderr: ${stderr}`);
-			}
-			console.log(`stdout: ${stdout}`);
-			
-			if (callback){
-				callback(stdout, stderr, error)
-			}
-		});
-	}
 
 	async create_folder_if_not_exist(path: string){
 		const tfolder = this.get_file_or_folder(path)
@@ -103,6 +94,8 @@ export default class ObsHtmlPlugin extends Plugin {
 		const orViewState = this.app.workspace.activeLeaf.getViewState()
 		console.log(orViewState); 
 
+		this.flash('Exporting files, hang on...', 5000);
+
 		// loop over each markdown file in Vault
 		for(let i = 0; i < files.length; i++){
 			console.log('------------', files[i].path)
@@ -120,7 +113,7 @@ export default class ObsHtmlPlugin extends Plugin {
 			await this.app.workspace.activeLeaf.setViewState(vs)
 
 			// get html
-			await sleep(10); // if someone knows the event for "html loading done", please let me know lol.
+			await sleep(50); // if someone knows the event for "html loading done", please let me know lol.
 			const html_el = this.app.workspace.containerEl.getElementsByClassName('markdown-preview-section')[0]
 			let html = html_el.innerHTML;
 
@@ -144,6 +137,43 @@ export default class ObsHtmlPlugin extends Plugin {
 		this.app.workspace.activeLeaf.setViewState(orViewState);
 
 		this.flash('Export done');
+
+		if (this.settings.run_obsidianhtml_after_export){
+			this.run_obsidianhtml()
+		}
+	}
+
+	async test(){
+		this.flash('100', 100)
+		this.flash('1000', 1000)
+		this.flash('5000', 5000)
+		const { stdout, stderr } = await exec('firefox http://localhost:8000');
+	}
+
+	async run_obsidianhtml(){
+		this.flash("Running ObsidianHtml... (You'll get notified when it's done)", 7000);
+
+		// compile command
+		const cwd = this.settings.cwd
+		const config_abs_path = this.settings.config_abs_path
+		const command = `cd "${cwd}"; obsidianhtml -i "${config_abs_path}"`
+		console.log(command)
+
+		// run command
+		const { stdout, stderr } = await exec(command);
+		
+		// handle result
+		if (stderr){
+			console.error('stderr:', stderr);
+			this.flash('Running ObsidianHtml --> failed!', 5000)
+		}
+		else if (stdout){
+			console.log('stdout:', stdout);
+			this.flash('Running ObsidianHtml --> done!', 5000)
+		}
+		else {
+			this.flash('Running ObsidianHtml --> failed!', 5000)
+		}
 	}
 
 	async dump_file_list(type: string){
@@ -174,10 +204,10 @@ export default class ObsHtmlPlugin extends Plugin {
 		await this.loadSettings();
 
 		// This creates an icon in the left ribbon.
-		let icons = ['logo-crystal', 'create-new', 'trash', 'search', 'right-triangle', 'document', 'folder', 'pencil', 'left-arrow', 'right-arrow', 'three-horizontal-bars', 'dot-network', 'audio-file', 'image-file', 'pdf-file', 'gear', 'documents', 'blocks', 'go-to-file', 'presentation', 'cross-in-box', 'microphone', 'microphone-filled', 'two-columns', 'link', 'popup-open', 'checkmark', 'hashtag', 'left-arrow-with-tail', 'right-arrow-with-tail', 'lines-of-text', 'vertical-three-dots', 'pin', 'magnifying-glass', 'info', 'horizontal-split', 'vertical-split', 'calendar-with-checkmark', 'sheets-in-box', 'up-and-down-arrows', 'broken-link', 'cross', 'any-key', 'reset', 'star', 'crossed-star', 'dice', 'filled-pin', 'enter', 'help', 'vault', 'open-vault', 'paper-plane', 'bullet-list', 'uppercase-lowercase-a', 'star-list', 'expand-vertically', 'languages', 'switch', 'pane-layout', 'install']
+		// let icons = ['logo-crystal', 'create-new', 'trash', 'search', 'right-triangle', 'document', 'folder', 'pencil', 'left-arrow', 'right-arrow', 'three-horizontal-bars', 'dot-network', 'audio-file', 'image-file', 'pdf-file', 'gear', 'documents', 'blocks', 'go-to-file', 'presentation', 'cross-in-box', 'microphone', 'microphone-filled', 'two-columns', 'link', 'popup-open', 'checkmark', 'hashtag', 'left-arrow-with-tail', 'right-arrow-with-tail', 'lines-of-text', 'vertical-three-dots', 'pin', 'magnifying-glass', 'info', 'horizontal-split', 'vertical-split', 'calendar-with-checkmark', 'sheets-in-box', 'up-and-down-arrows', 'broken-link', 'cross', 'any-key', 'reset', 'star', 'crossed-star', 'dice', 'filled-pin', 'enter', 'help', 'vault', 'open-vault', 'paper-plane', 'bullet-list', 'uppercase-lowercase-a', 'star-list', 'expand-vertically', 'languages', 'switch', 'pane-layout', 'install']
 		const ribbonIconEl = this.addRibbonIcon('paper-plane', `${this.plugin_name} Export html`, (evt: MouseEvent) => {
-			//this.create_export_folder();
 			this.export_html();
+			//this.test()
 		});
 		
 		// Perform additional things with the ribbon
@@ -270,6 +300,18 @@ class SampleSettingTab extends PluginSettingTab {
 				this.plugin.settings.config_abs_path = value;
 				await this.plugin.saveSettings();
 			}));
+
+			new Setting(containerEl)
+			.setName('Working directory')
+			.setDesc('Which folder do you want to run obsidianhtml from?')
+			.addText(text => text
+				.setPlaceholder('Enter your path')
+				.setValue(this.plugin.settings.cwd)
+				.onChange(async (value) => {
+					console.log('cwd path: ' + value);
+					this.plugin.settings.cwd = value;
+					await this.plugin.saveSettings();
+				}));
 	}
 }
 
