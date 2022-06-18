@@ -11,4 +11,4 @@ Tl;dr:
 - enable this plugin
 
 ## Usage
-Click the dice icon in the icon bar, this will create folder `your/vault/obs.html/export` and then create an html file per markdown note in your vault.
+Click the paper airplane icon in the icon bar, this will create folder `<your/vault>/obs.html/export` and then create an html file per markdown note in your vault.
